@@ -28,20 +28,21 @@ Lambda0 <- data[[1]]$Lambda
   set.seed(12)
   # Lambda0 <- Lambda
   num_iter=500
-  num_burn=250
-  thin=5
+  num_burn=300
+  thin=2
   num_slice=(num_iter-num_burn)/thin
   # recMethod="PCA"
   ### Parameter initialization ###
   N <- nrow(Y)
   p <- ncol(Y)
-  std <- apply(Y, 2, sd) # std of Y
+  #std <- apply(Y, 2, sd) # std of Y
   # Y <- scale(Y)
+  #std <- apply(Y, 2, scale)
   
   k_tilde <- round(5*log(p)) # initial guess of k
   k_ast <- k_tilde
   
-  psi <- 100 # dispersion parameter for pMOM density
+  psi <- 1 # dispersion parameter for pMOM density
   p0 <- 0.4
   a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
   a_sigma <- 1
@@ -109,7 +110,7 @@ Lambda0 <- data[[1]]$Lambda
         if (Z[i, k]){
           a <- 0.5 * (Sigma_inv %*% Lambda[,k]^2 + 1/psi)
           b <- 0.5 * Lambda[, k] %*% diag(Sigma_inv) %*% (Lambda[, -k] %*% eta[i,-k] - Y[i,])
-          eta[i, k] <- MH(func=pos_eta, init=eta[i, k], M=2, a=a, b=b)
+          eta[i, k] <- MH(func=pos_eta, init=eta[i, k], M=2, a=a, b=b, sd_value=0.1)
         } else {
           eta[i, k] <- 0
         }
@@ -241,20 +242,20 @@ Lambda0 <- data[[1]]$Lambda
       cat("\n")
     }
   }
-  # # Recovering loading matrix
-  # if (recMethod=="PCA"){
-  #   # estimate the true number of factors and recover the loading matrix
-  #   eigList <- eigen(Omega_hat * std %*% t(std))
-  #   eigVec <- eigList$vectors
-  #   eigVal <- eigList$values
-  #   idx_eff <- which(eigVal/sum(eigVal) > .05) # index of effective factors
-  #   Lambda_hat <- (eigVec %*% (eigVal %>% sqrt %>% diag))[, idx_eff]
-  #   k_hat <- length(idx_eff)
-  #   # error <- Omega_hat_org - Omega_0
-  # } else {
-  #   Lambda_hat <- OP(list_Lambda)
-  #   k_hat <- ncol(Lambda_hat)
-  # }
+   # Recovering loading matrix
+   if (recMethod=="PCA"){
+     # estimate the true number of factors and recover the loading matrix
+     eigList <- eigen(Omega_hat * std %*% t(std))
+     eigVec <- eigList$vectors
+     eigVal <- eigList$values
+     idx_eff <- which(eigVal/sum(eigVal) > .05) # index of effective factors
+     Lambda_hat <- (eigVec %*% (eigVal %>% sqrt %>% diag))[, idx_eff]
+     k_hat <- length(idx_eff)
+     # error <- Omega_hat_org - Omega_0
+   } else {
+     Lambda_hat <- OP(list_Lambda)
+     k_hat <- ncol(Lambda_hat)
+   }
   
   # Summarize factor score
   sparsity <- apply(cube_eta!=0, 1, function(arr){
@@ -277,7 +278,7 @@ Lambda0 <- data[[1]]$Lambda
   } else {
     # RV <- coeffRV(Lambda_hat, Lambda0)
     RV <- coeffRV(eta_hat, eta0)
-    return(list(RV=RV, cube_eta=cube_eta))
+    #return(list(RV=RV, cube_eta=cube_eta))
   }
 
 file_name <- sprintf("../data/simul_results_p%d_k%d_n%d_rep%d.RData", p, k, N, num_rep)

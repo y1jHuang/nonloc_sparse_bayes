@@ -15,7 +15,7 @@ gen_eta <- function(Z){
   num_slab <- sum(Z)
   eta <- matrix(0, nrow(Z), ncol(Z))
   # rand <- rnorm(num_slab)
-  rand <- sapply(1:num_slab, function(x){MH(func=pmom, step_size=0.1, psi=0.5)})
+  rand <- sapply(1:num_slab, function(x){MH(func=pmom, sd_value=0.1, psi=0.5)})
   eta[Z==1] <- rand
   return(eta)
 }
