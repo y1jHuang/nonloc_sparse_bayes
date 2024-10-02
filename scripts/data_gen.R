@@ -5,11 +5,12 @@ source("pmom.R")
 # Initialization
 num_rep <- 50 # number of replications
 N <- 100 # number of observations
-p <- 30 # number of predictors
-k <- 5 # true number of factors
+p <- 20 # number of predictors
+k <- 3 # true number of factors
 p0 <- 0.6 # probability that factor score is non-zero
 # num_eff <- k + sample(k) # number of non-zero elements in each column of Lambda
-num_eff <- seq(2*k, k+1, -1)
+#num_eff <- seq(2*k, k+1, -1)
+num_eff <- seq(4*k, 2*(k+1), -2)
 gen_eta <- function(Z){
   Z <- as.matrix(Z)
   num_slab <- sum(Z)
@@ -35,7 +36,7 @@ data <- lapply(1:num_rep, function(rep){
   Z <- matrix(rbinom(N*k, 1, p0), N, k)
   eta <- gen_eta(Z)
   # Sigma <- diag(1/rgamma(p, shape=1, rate=0.25))
-  Sigma <- diag(runif(p, 0, 0.5))
+  Sigma <- diag(runif(p, 0, 0.1))
   epsilon <- LaplacesDemon::rmvn(N, 0, Sigma)
   Y <- eta %*% t(Lambda) + epsilon
   return(list(Y=Y, Lambda=Lambda, eta=eta))
@@ -44,3 +45,8 @@ data <- lapply(1:num_rep, function(rep){
 # Save data
 file_name <- sprintf("../data/simul_data_p%d_k%d_n%d_rep%d_norm.RData", p, k, N, num_rep)
 save(data, file=file_name)
+
+
+data[[1]]$Lambda
+data[[1]]$eta
+head(data[[1]]$eta%*%t(data[[1]]$Lambda))

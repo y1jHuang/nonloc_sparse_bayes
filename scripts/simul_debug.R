@@ -18,8 +18,8 @@ trim <- function(x){
   return(as.matrix(x[,1:idx.tail]))
 }
 
-file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50\\.RData$", full.names=T)
-load(file_name)
+#file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50\\.RData$", full.names=T)
+#load(file_name)
 rep <- 1
 Y <- data[[1]]$Y
 eta0 <- data[[1]]$eta
@@ -43,8 +43,8 @@ Lambda0 <- data[[1]]$Lambda
   k_ast <- k_tilde
   
   psi <- 1 # dispersion parameter for pMOM density
-  p0 <- 0.4
-  a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
+  p0 <- 0.5
+  a_p0 = b_p0 <- 3 # hyperparameter for the prior of p0
   a_sigma <- 1
   b_sigma <- 0.3
   a1 <- 2.1 # shape parameter for \delta_1 prior
@@ -276,10 +276,13 @@ Lambda0 <- data[[1]]$Lambda
   if (is.null(eta0)){
     return(list(Lambda=Lambda_hat, eta=eta_hat, k=k_hat))
   } else {
-    # RV <- coeffRV(Lambda_hat, Lambda0)
-    RV <- coeffRV(eta_hat, eta0)
+    RVlambda <- coeffRV(Lambda, Lambda0)$rv #####
+    RVeta <- coeffRV(eta_hat, eta0)$rv
+    RVmult <- coeffRV(eta_hat%*%t(Lambda[,1:(dim(eta_hat)[2])]), eta0%*%t(Lambda0))$rv
     #return(list(RV=RV, cube_eta=cube_eta))
   }
 
 file_name <- sprintf("../data/simul_results_p%d_k%d_n%d_rep%d.RData", p, k, N, num_rep)
 save(k_est, error, file=file_name)
+
+
