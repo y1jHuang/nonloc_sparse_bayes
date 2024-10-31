@@ -1,7 +1,6 @@
 library(tidyverse)
 library(LaplacesDemon)
 library(FactoMineR)
-library(invgamma)
 source("MH.R")
 source("pmom.R")
 source("pos_eta.R")
@@ -18,33 +17,34 @@ trim <- function(x){
   return(as.matrix(x[,1:idx.tail]))
 }
 
-#file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50\\.RData$", full.names=T)
-#load(file_name)
+file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50_norm\\.RData$", full.names=T)
+load(file_name)
 rep <- 1
 Y <- data[[1]]$Y
 eta0 <- data[[1]]$eta
-Lambda0 <- data[[1]]$Lambda
+Lambda0 <- data[[1]]$Lambda 
+Sigma0 <- data[[1]]$Sigma
 ################### Sparse Bayesian Infinite Factor Model ####################
   set.seed(12)
   # Lambda0 <- Lambda
   num_iter=500
-  num_burn=300
-  thin=2
+  num_burn=250
+  thin=5
   num_slice=(num_iter-num_burn)/thin
   # recMethod="PCA"
   ### Parameter initialization ###
   N <- nrow(Y)
   p <- ncol(Y)
-  #std <- apply(Y, 2, sd) # std of Y
+  # std <- apply(Y, 2, sd) # std of Y
   # Y <- scale(Y)
-  #std <- apply(Y, 2, scale)
   
   k_tilde <- round(5*log(p)) # initial guess of k
   k_ast <- k_tilde
+  k_ast <- ncol(Lambda0)
   
-  psi <- 1 # dispersion parameter for pMOM density
-  p0 <- 0.5
-  a_p0 = b_p0 <- 3 # hyperparameter for the prior of p0
+  psi <- 1 # dispersion parameter for pMOM density.
+  p0 <- 0.6
+  a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
   a_sigma <- 1
   b_sigma <- 0.3
   a1 <- 2.1 # shape parameter for \delta_1 prior
@@ -58,12 +58,6 @@ Lambda0 <- data[[1]]$Lambda
   
   Z <- matrix(1, N, k_ast)
   eta <- LaplacesDemon::rmvn(N, 0, diag(k_ast))
-  # Z <- eta0 != 0
-  # eta <- eta0
-  # eta <- runif(N*k_ast, -1, 1) %>%
-  #   matrix(N, k_ast)
-  # Lambda <- Lambda0
-  # k_ast <- ncol(Lambda)
   Lambda <- matrix(0, nrow=p, ncol=k_ast)
   Sigma_inv <- rgamma(p, shape=a_sigma, rate=b_sigma)
   Sigma <- diag(1/Sigma_inv)
@@ -76,8 +70,11 @@ Lambda0 <- data[[1]]$Lambda
   # # A cube to store Lambda in each iteration after the burn-in phase
   # cube_Lambda <- array(NA, dim=c(num_slice))
   # A cube to store eta in each iteration after the burn-in phase
-  cube_eta <- array(0, dim=c(N, k_ast, num_slice))
-  
+  # cube_eta <- array(0, dim=c(N, k_ast, num_slice))
+  cov_eta <- matrix(0, N, N)
+  cov_Lambda <- matrix(0, p, p)
+  mult <- matrix(0, N, p)
+  cov_epsilon <- matrix(0, p, p)
   # Omega_hat <- matrix(0, p, p)
   k_est <- rep(0, num_iter) # list to record k_ast in each iteration
   
@@ -110,7 +107,7 @@ Lambda0 <- data[[1]]$Lambda
         if (Z[i, k]){
           a <- 0.5 * (Sigma_inv %*% Lambda[,k]^2 + 1/psi)
           b <- 0.5 * Lambda[, k] %*% diag(Sigma_inv) %*% (Lambda[, -k] %*% eta[i,-k] - Y[i,])
-          eta[i, k] <- MH(func=pos_eta, init=eta[i, k], M=2, a=a, b=b, sd_value=0.1)
+          eta[i, k] <- MH(func=pos_eta, step_size=0.1, init=eta[i, k], M=2, a=a, b=b)
         } else {
           eta[i, k] <- 0
         }
@@ -185,16 +182,16 @@ Lambda0 <- data[[1]]$Lambda
     })
     Sigma <- diag(1 / Sigma_inv)
     
-    ### adaptation strategy ###
-    prob <- exp(alpha0 + alpha1 * iter)
-    u <- runif(1)
-    # proportion of elements closed to 0 in each column
-    prop_zero <- apply(Lambda, 2, function(col){
-      sum(abs(col) < epsilon)/p
-    })
-    # index of redundant columns whose elements are all closed to 0
-    idx_red <- which(prop_zero == 1)
-    m <- length(idx_red) # number of redundant factors in each iteration
+    # ### adaptation strategy ###
+    # prob <- exp(alpha0 + alpha1 * iter)
+    # u <- runif(1)
+    # # proportion of elements closed to 0 in each column
+    # prop_zero <- apply(Lambda, 2, function(col){
+    #   sum(abs(col) < epsilon)/p
+    # })
+    # # index of redundant columns whose elements are all closed to 0
+    # idx_red <- which(prop_zero == 1)
+    # m <- length(idx_red) # number of redundant factors in each iteration
     
     if (iter > num_burn && iter %% thin == 0){
       # if (recMethod=="OP"){
@@ -202,38 +199,42 @@ Lambda0 <- data[[1]]$Lambda
       # }
       # Omega <- Lambda %*% t(Lambda) + Sigma # Omega(t)
       # Omega_hat <- Omega_hat + Omega/num_slice # estimated Omega
-      k_prev <- dim(cube_eta)[2]
-      k_curr <- ncol(eta)
-      if (k_prev < k_curr) {
-        cube_eta <- abind::abind(cube_eta, 
-                                 array(0, dim=c(N, k_curr-k_prev, num_slice)),
-                                 along=2)
-        cube_eta[ , , (iter-num_burn)/thin] <- eta
-      } else {
-        cube_eta[ , 1:k_curr, (iter-num_burn)/thin] <- eta
-      }
+      # k_prev <- dim(cube_eta)[2]
+      # k_curr <- ncol(eta)
+      # if (k_prev < k_curr) {
+      #   cube_eta <- abind::abind(cube_eta, 
+      #                            array(0, dim=c(N, k_curr-k_prev, num_slice)),
+      #                            along=2)
+      #   cube_eta[ , , (iter-num_burn)/thin] <- eta
+      # } else {
+      #   cube_eta[ , 1:k_curr, (iter-num_burn)/thin] <- eta
+      # }
+      cov_eta <- cov_eta + eta %*% t(eta) / num_slice
+      cov_Lambda <- cov_Lambda + Lambda %*% t(Lambda) /num_slice
+      mult <- mult + eta %*% t(Lambda) /num_slice
+      cov_epsilon <- cov_epsilon + Sigma / num_slice
     }
     
-    # adaptation strategy
-    if (u < prob){
-      if (iter > 20 && m == 0 && all(prop_zero < .995)){
-        k_ast <- k_ast + 1
-        Lambda <- cbind(Lambda, rep(0,p))
-        Z <- cbind(Z, rep(0, N))
-        eta <- cbind(eta, rep(0, N))
-        phi <- cbind(phi, rgamma(p, shape=df/2, rate=df/2))
-        delta <- c(delta, rgamma(1, shape=a2, rate=b2))
-        tau <- cumprod(delta)
-      } else if (m > 0) {
-        k_ast <- max(k_ast-m, 1)
-        Lambda <- Lambda[, -idx_red]
-        eta <- eta[, -idx_red]
-        Z <- Z[, -idx_red]
-        phi <- phi[, -idx_red]
-        delta <- delta[-idx_red]
-        tau <- cumprod(delta)
-      }
-    }
+    # # adaptation strategy
+    # if (u < prob){
+    #   if (iter > 20 && m == 0 && all(prop_zero < .995)){
+    #     k_ast <- k_ast + 1
+    #     Lambda <- cbind(Lambda, rep(0,p))
+    #     Z <- cbind(Z, rep(0, N))
+    #     eta <- cbind(eta, rep(0, N))
+    #     phi <- cbind(phi, rgamma(p, shape=df/2, rate=df/2))
+    #     delta <- c(delta, rgamma(1, shape=a2, rate=b2))
+    #     tau <- cumprod(delta)
+    #   } else if (m > 0) {
+    #     k_ast <- max(k_ast-m, 1)
+    #     Lambda <- Lambda[, -idx_red]
+    #     eta <- eta[, -idx_red]
+    #     Z <- Z[, -idx_red]
+    #     phi <- phi[, -idx_red]
+    #     delta <- delta[-idx_red]
+    #     tau <- cumprod(delta)
+    #   }
+    # }
     
     k_est[iter] <- k_ast
     
@@ -242,47 +243,44 @@ Lambda0 <- data[[1]]$Lambda
       cat("\n")
     }
   }
-   # Recovering loading matrix
-   if (recMethod=="PCA"){
-     # estimate the true number of factors and recover the loading matrix
-     eigList <- eigen(Omega_hat * std %*% t(std))
-     eigVec <- eigList$vectors
-     eigVal <- eigList$values
-     idx_eff <- which(eigVal/sum(eigVal) > .05) # index of effective factors
-     Lambda_hat <- (eigVec %*% (eigVal %>% sqrt %>% diag))[, idx_eff]
-     k_hat <- length(idx_eff)
-     # error <- Omega_hat_org - Omega_0
-   } else {
-     Lambda_hat <- OP(list_Lambda)
-     k_hat <- ncol(Lambda_hat)
-   }
+  # Recovering loading matrix
+  # if (recMethod=="PCA"){
+  #   # estimate the true number of factors and recover the loading matrix
+  #   eigList <- eigen(Omega_hat * std %*% t(std))
+  #   eigVec <- eigList$vectors
+  #   eigVal <- eigList$values
+  #   idx_eff <- which(eigVal/sum(eigVal) > .05) # index of effective factors
+  #   Lambda_hat <- (eigVec %*% (eigVal %>% sqrt %>% diag))[, idx_eff]
+  #   k_hat <- length(idx_eff)
+  #   # error <- Omega_hat_org - Omega_0
+  # } else {
+  #   Lambda_hat <- OP(list_Lambda)
+  #   k_hat <- ncol(Lambda_hat)
+  # }
   
   # Summarize factor score
-  sparsity <- apply(cube_eta!=0, 1, function(arr){
-    apply(arr, 1, get_mode)
-  }) %>% t
-  idx_slab <- which(sparsity==1, arr.ind=T)
-  idx_spike <- which(sparsity==0, arr.ind=T)
-  eta_slab <- sapply(1:nrow(idx_slab), function(m){
-    i <- idx_slab[m, 1]
-    k <- idx_slab[m, 2]
-    mean(cube_eta[i, k, ])
-  })
-  eta_hat <- matrix(0, N, ncol(sparsity))
-  eta_hat[idx_slab] <- eta_slab
-  eta_hat[idx_spike] <- 0
-  eta_hat <- trim(eta_hat)
+  # sparsity <- apply(cube_eta!=0, 1, function(arr){
+  #   apply(arr, 1, get_mode)
+  # }) %>% t
+  # idx_slab <- which(sparsity==1, arr.ind=T)
+  # idx_spike <- which(sparsity==0, arr.ind=T)
+  # eta_slab <- sapply(1:nrow(idx_slab), function(m){
+  #   i <- idx_slab[m, 1]
+  #   k <- idx_slab[m, 2]
+  #   mean(cube_eta[i, k, ])
+  # })
+  # eta_hat <- matrix(0, N, ncol(sparsity))
+  # eta_hat[idx_slab] <- eta_slab
+  # eta_hat[idx_spike] <- 0
+  # eta_hat <- trim(eta_hat)
+  # eta_hat <- apply(cube_eta, 1, function(arr){
+  #   apply(arr, 1, median)
+  # }) %>% t  
   
-  if (is.null(eta0)){
-    return(list(Lambda=Lambda_hat, eta=eta_hat, k=k_hat))
-  } else {
-    RVlambda <- coeffRV(Lambda, Lambda0)$rv #####
-    RVeta <- coeffRV(eta_hat, eta0)$rv
-    RVmult <- coeffRV(eta_hat%*%t(Lambda[,1:(dim(eta_hat)[2])]), eta0%*%t(Lambda0))$rv
-    #return(list(RV=RV, cube_eta=cube_eta))
-  }
+  RV_Lambda <- coeffRV(cov_Lambda, Lambda0 %*% t(Lambda0))$rv
+  RV_eta <- coeffRV(cov_eta, eta0 %*% t(eta0))$rv
+  RV_mult <- coeffRV(mult, eta0 %*% t(Lambda0))$rv
+  RV_cov <- coeffRV(cov_epsilon, Sigma0)$rv
 
 file_name <- sprintf("../data/simul_results_p%d_k%d_n%d_rep%d.RData", p, k, N, num_rep)
 save(k_est, error, file=file_name)
-
-
