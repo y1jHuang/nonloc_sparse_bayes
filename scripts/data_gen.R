@@ -4,18 +4,18 @@ source("MH.R")
 source("pmom.R")
 # Initialization
 num_rep <- 50 # number of replications
-N <- 100 # number of observations
-p <- 30 # number of predictors
-k <- 5 # true number of factors
-p0 <- 1 # probability that factor score is non-zero
+N <- 200 # number of observations
+p <- 20 # number of predictors
+k <- 3 # true number of factors
+p0 <- 0.8 # probability that factor score is non-zero
 # num_eff <- k + sample(k) # number of non-zero elements in each column of Lambda
-num_eff <- seq(4*k, 2*(k+1), -1)
+num_eff <- seq(4*k, 2*(k+1), -2)
 gen_eta <- function(Z){
   Z <- as.matrix(Z)
   num_slab <- sum(Z)
   eta <- matrix(0, nrow(Z), ncol(Z))
   # rand <- rnorm(num_slab)
-  rand <- sapply(1:num_slab, function(x){MH(func=pmom, step_size=0.1, psi=0.5)})
+  rand <- sapply(1:sum(num_slab), function(x){MH(func=pmom, step_size=0.1, psi=0.5)})
   eta[Z==1] <- rand
   return(eta)
 }
@@ -40,9 +40,15 @@ data <- lapply(1:num_rep, function(rep){
   Sigma <- diag(runif(p, 0, 0.1))
   epsilon <- LaplacesDemon::rmvn(N, 0, Sigma)
   Y <- eta %*% t(Lambda) + epsilon
-  return(list(Y=Y, Lambda=Lambda, eta=eta, Sigma=Sigma))
+  return(list(Y=Y, Lambda=Lambda, eta=eta, Sigma=Sigma, Z=Z))
 })
 
 # Save data
 file_name <- sprintf("../data/simul_data_p%d_k%d_n%d_rep%d_norm.RData", p, k, N, num_rep)
 save(data, file=file_name)
+
+round(data[[1]]$Lambda,3)
+data[[1]]$Z
+head(data[[1]]$eta)
+(data[[1]]$eta)%*%t(data[[1]]$Lambda)
+round((data[[1]]$eta)%*%t(data[[1]]$Lambda),3)
