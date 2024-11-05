@@ -17,7 +17,7 @@ trim <- function(x){
   return(as.matrix(x[,1:idx.tail]))
 }
 
-file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50_norm\\.RData$", full.names=T)
+file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50\\.RData$", full.names=T)
 load(file_name)
 rep <- 1
 Y <- data[[1]]$Y

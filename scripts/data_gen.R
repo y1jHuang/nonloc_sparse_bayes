@@ -44,5 +44,5 @@ data <- lapply(1:num_rep, function(rep){
 })
 
 # Save data
-file_name <- sprintf("../data/simul_data_p%d_k%d_n%d_rep%d_norm.RData", p, k, N, num_rep)
+file_name <- sprintf("../data/simul_data_p%d_k%d_n%d_rep%d.RData", p, k, N, num_rep)
 save(data, file=file_name)
