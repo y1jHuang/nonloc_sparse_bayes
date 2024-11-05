@@ -1,6 +1,7 @@
 library(tidyverse)
 library(LaplacesDemon)
 library(FactoMineR)
+library(MatrixCorrelation)
 source("MH.R")
 source("pmom.R")
 source("pos_eta.R")
@@ -20,8 +21,8 @@ trim <- function(x){
 
 ################### Sparse Bayesian Infinite Factor Model ####################
 nonloc_sparse_bayes <- function(Y, eta0=NULL, 
-                                num_iter=250, 
-                                num_burn=50, thin=5, 
+                                num_iter=500, 
+                                num_burn=200, thin=5, 
                                 num_slice=(num_iter-num_burn)/thin){
   ### Parameter initialization ###
   N <- nrow(Y)
@@ -29,11 +30,12 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
   std <- apply(Y, 2, sd) # std of Y
   # Y <- scale(Y)
   
-  k_tilde <- round(5*log(p)) # initial guess of k
+  #k_tilde <- round(5*log(p)) # initial guess of k
+  k_tilde = 3
   k_ast <- k_tilde
   
   psi <- 0.01 # dispersion parameter for pMOM density
-  p0 <- 0.1
+  p0 <- 0.5
   a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
   a_sigma <- 1
   b_sigma <- 0.3
@@ -55,9 +57,18 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
   tau <- cumprod(delta)
   
   # A cube to store eta in each iteration after the burn-in phase
-  cube_eta <- array(0, dim=c(N, k_ast, num_slice))
+  #cube_eta <- array(0, dim=c(N, k_ast, num_slice))
   
-  k_est <- rep(0, num_iter) # list to record k_ast in each iteration
+  #k_est <- rep(0, num_iter) # list to record k_ast in each iteration
+  
+  # saving RV
+  RV_Z <- rep(0, num_iter)
+  RV_L <- rep(0, num_iter)
+  RV_L_2 <- rep(0, num_iter)
+  RV_eta <- rep(0, num_iter)
+  RV_eta_2 <- rep(0, num_iter)
+  RV_L_eta <- rep(0, num_iter)
+  
   
   ### Gibbs sampling ###
   for (iter in 1:num_iter){
@@ -88,7 +99,7 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
     eta[idx_spike] <- 0
     
     # update p0
-    p0 <- rbeta(1, sum(Z)+a_p0, N*k_ast-sum(Z)+b_p0)
+    p0 <- rbeta(1, sum(sum(Z))+a_p0, N*k_ast-sum(sum(Z))+b_p0)
     
     # update Lambda
     Lambda <- sapply(1:p, function(j){
@@ -127,55 +138,62 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
     # update Sigma
     res <- (Y - eta %*% t(Lambda))^2
     Sigma_inv <- sapply(1:p, function(j){
-      rgamma(1, shape=a_sigma + n / 2, rate=b_sigma + 0.5 * sum(res[,j]))
+      rgamma(1, shape=a_sigma + N / 2, rate=b_sigma + 0.5 * sum(res[,j]))
     })
     Sigma <- diag(1 / Sigma_inv)
     
     ### adaptation strategy ###
-    prob <- exp(alpha0 + alpha1 * iter)
-    u <- runif(1)
+    #prob <- exp(alpha0 + alpha1 * iter)
+    #u <- runif(1)
     # proportion of elements closed to 0 in each column
-    prop_zero <- apply(Lambda, 2, function(col){
-      sum(abs(col) < epsilon)/p
-    })
+    #prop_zero <- apply(Lambda, 2, function(col){
+    #  sum(abs(col) < epsilon)/p
+    #})
     # index of redundant columns whose elements are all closed to 0
-    idx_red <- which(prop_zero == 1)
-    m <- length(idx_red) # number of redundant factors in each iteration
+    #idx_red <- which(prop_zero == 1)
+    #m <- length(idx_red) # number of redundant factors in each iteration
     
-    if (iter > num_burn && iter %% thin == 0){
-      k_prev <- dim(cube_eta)[3]
-      k_curr <- ncol(eta)
-      if (k_prev < k_curr) {
-        cube_eta <- abind::abind(cube_eta, 
-                                 array(0, dim=c(N, k_curr-k_prev, num_slice)),
-                                 along=2)
-        cube_eta[ , , (iter-num_burn)/thin] <- eta
-      } else {
-        cube_eta[ , 1:k_curr, (iter-num_burn)/thin] <- eta
-      }
-    }
+    #if (iter > num_burn && iter %% thin == 0){
+    #  k_prev <- dim(cube_eta)[3]
+    #  k_curr <- ncol(eta)
+    #  if (k_prev < k_curr) {
+    #    cube_eta <- abind::abind(cube_eta, 
+    #                             array(0, dim=c(N, k_curr-k_prev, num_slice)),
+    #                             along=2)
+    #    cube_eta[ , , (iter-num_burn)/thin] <- eta
+    #  } else {
+    #   cube_eta[ , 1:k_curr, (iter-num_burn)/thin] <- eta
+    #  }
+    #}
     
-    if (u < prob){
-      if (iter > 20 && m == 0 && all(prop_zero < .995)){
-        k_ast <- k_ast + 1
-        Lambda <- cbind(Lambda, rep(0,p))
-        Z <- cbind(Z, rbinom(n, 1, p0))
-        eta <- cbind(eta, eta_init(Z[, k_ast], MH, pmom, psi=psi))
-        phi <- cbind(phi, rgamma(p, shape=df/2, rate=df/2))
-        delta <- c(delta, rgamma(1, shape=a2, rate=b2))
-        tau <- cumprod(delta)
-      } else if (m > 0) {
-        k_ast <- max(k_ast-m, 1)
-        Lambda <- Lambda[, -idx_red]
-        eta <- eta[, -idx_red]
-        Z <- Z[, -idx_red]
-        phi <- phi[, -idx_red]
-        delta <- delta[-idx_red]
-        tau <- cumprod(delta)
-      }
-    }
+    #if (u < prob){
+    #  if (iter > 20 && m == 0 && all(prop_zero < .995)){
+    #    k_ast <- k_ast + 1
+    #    Lambda <- cbind(Lambda, rep(0,p))
+    #    Z <- cbind(Z, rbinom(N, 1, p0))
+    #    eta <- cbind(eta, eta_init(Z[, k_ast], MH, pmom, psi=psi))
+    #    phi <- cbind(phi, rgamma(p, shape=df/2, rate=df/2))
+    #    delta <- c(delta, rgamma(1, shape=a2, rate=b2))
+    #    tau <- cumprod(delta)
+    #  } else if (m > 0) {
+    #    k_ast <- max(k_ast-m, 1)
+    #    Lambda <- Lambda[, -idx_red]
+    #    eta <- eta[, -idx_red]
+    #    Z <- Z[, -idx_red]
+    #    phi <- phi[, -idx_red]
+    #    delta <- delta[-idx_red]
+    #    tau <- cumprod(delta)
+    #  }
+    #}
     
-    k_est[iter] <- k_ast
+    #k_est[iter] <- k_ast
+    
+    RV_Z[iter] <- RVadj(Z, data[[1]]$Z)
+    RV_L[iter] <- RVadj(Lambda, data[[1]]$Lambda)
+    RV_L_2[iter] <- RVadj(Lambda%*%t(Lambda), data[[1]]$Lambda%*%t(data[[1]]$Lambda))
+    RV_eta[iter] <- RVadj(eta, data[[1]]$eta)
+    RV_eta_2[iter] <- RVadj(eta%*%t(eta), data[[1]]$eta%*%t(data[[1]]$eta))
+    RV_L_eta[iter] <- RVadj(Lambda%*%t(eta), data[[1]]$Lambda%*%t(data[[1]]$eta))
     
     if (iter %% 100 == 0){
       cat(iter)
@@ -199,11 +217,21 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
   eta_hat[idx_spike] <- 0
   eta_hat <- trim(eta_hat)
   
-  if (is.null(eta0)){
-    return(list(Lambda=Lambda_hat, eta=eta_hat, k=k_hat, cube_eta=cube_eta))
-  } else {
+  #if (is.null(eta0)){
+  #  return(list(Lambda=Lambda_hat, eta=eta_hat, k=k_hat, cube_eta=cube_eta))
+  #} else {
     # RV <- coeffRV(Lambda_hat, Lambda0)
-    RV <- coeffRV(eta_hat, eta0)
+    # RV <- coeffRV(eta_hat, eta0)
     return(list(RV=RV, eta=eta_hat, cube_eta=cube_eta))
-  }
+  return(list(RV_Z=RV_Z, RV_L=RV_L, RV_eta=RV_eta,RV_L_2=RV_L_2, RV_eta_2=RV_eta_2, RV_L_eta=RV_L_eta))
+  #}
 }
+
+
+
+plot(RV_Z[100:500], type="l")
+plot(RV_L[100:500], type="l")
+plot(RV_L_2[100:500], type="l")
+plot(RV_eta[100:500], type="l")
+plot(RV_eta_2[100:500], type="l")
+plot(RV_L_eta[100:500], type="l")
