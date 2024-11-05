@@ -35,7 +35,7 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
   k_ast <- k_tilde
   
   psi <- 0.01 # dispersion parameter for pMOM density
-  p0 <- 0.1
+  p0 <- 0.5
   a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
   a_sigma <- 1
   b_sigma <- 0.3
@@ -231,5 +231,7 @@ nonloc_sparse_bayes <- function(Y, eta0=NULL,
 
 plot(RV_Z[100:500], type="l")
 plot(RV_L[100:500], type="l")
+plot(RV_L_2[100:500], type="l")
 plot(RV_eta[100:500], type="l")
+plot(RV_eta_2[100:500], type="l")
 plot(RV_L_eta[100:500], type="l")
