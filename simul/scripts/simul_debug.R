@@ -10,7 +10,7 @@ source("func_lib.R")
 #   return(as.matrix(x[,1:idx.tail]))
 # }
 
-file_name <- list.files("../data", pattern="data.*p30_k5_n100.*rep50_norm\\.RData$", full.names=T)
+file_name <- list.files("../data", pattern="p20_k3_n100", full.names=T)
 load(file_name)
 rep <- 1
 Y <- data[[1]]$Y
@@ -21,8 +21,8 @@ Sigma0 <- data[[1]]$Sigma
 ################### Sparse Bayesian Infinite Factor Model ####################
 set.seed(12)
 # Lambda0 <- Lambda
-num_iter=500
-num_burn=250
+num_iter=5000
+num_burn=2500
 thin=5
 num_slice=(num_iter-num_burn)/thin
 # recMethod="PCA"
@@ -34,8 +34,8 @@ p <- ncol(Y)
 k_ast <- ncol(Lambda0)
 
 psi <- 1 # dispersion parameter for pMOM density.
-p0 <- 0.6
-a_p0 = b_p0 <- 5 # hyperparameter for the prior of p0
+theta <- 0.6
+a_theta = b_theta <- 5 # hyperparameter for the prior of theta
 a_sigma <- 1
 b_sigma <- 0.3
 a1 <- 2.1 # shape parameter for \delta_1 prior
@@ -72,7 +72,7 @@ for (iter in 1:num_iter){
         a <- 1 / psi + t(Lambda[, k]) %*% diag(Sigma_inv) %*% Lambda[, k]
         b <- t(Y[i,] - Lambda[, -k] %*% eta[i, -k]) %*% diag(Sigma_inv) %*% Lambda[, k]
         t <- (a * psi)^(-3/2) * (1 + b^2 / a) * exp(b^2 / (2 * a))
-        prob <- 1 - (1 - p0) / (1 - p0 + p0 * t)
+        prob <- 1 - (1 - theta) / (1 - theta + theta * t)
         Z[i, k] <- rbinom(1, 1, prob)
     }
   }
@@ -83,15 +83,15 @@ for (iter in 1:num_iter){
       if (Z[i, k]){
         a <- 0.5 * (Sigma_inv %*% Lambda[,k]^2 + 1/psi)
         b <- 0.5 * Lambda[, k] %*% diag(Sigma_inv) %*% (Lambda[, -k] %*% eta[i,-k] - Y[i,])
-        eta[i, k] <- MH(func=pos_eta, step_size=0.1, init=eta[i, k], M=2, a=a, b=b)
+        eta[i, k] <- MH(func=pos_eta, step_size=1, init=eta[i, k], M=2, a=a, b=b)
       } else {
         eta[i, k] <- 0
       }
     }
   }
   
-  # update p0
-  p0 <- rbeta(1, sum(Z)+a_p0, N*k_ast-sum(Z)+b_p0)
+  # update theta
+  theta <- rbeta(1, sum(Z)+a_theta, N*k_ast-sum(Z)+b_theta)
   
   # update Lambda
   Lambda <- sapply(1:p, function(j){
@@ -144,6 +144,11 @@ for (iter in 1:num_iter){
     cat("\n")
   }
 }
-
-RV_Lambda <- coeffRV(cov_Lambda, Lambda0 %*% t(Lambda0))$rv
-RV_eta <- coeffRV(cov_eta, eta0 %*% t(eta0))$rv
+Lambda_hat <- apply(cube_Lambda, 1, function(arr){
+  apply(arr, 1, median)
+  }) %>% t
+eta_hat <- apply(cube_eta, 1, function(arr){
+  apply(arr, 1, median)
+  }) %>% t
+RV_Lambda <- coeffRV(Lambda_hat, Lambda0)$rv
+RV_eta <- coeffRV(eta_hat, eta0)$rv
